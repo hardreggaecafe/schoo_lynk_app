@@ -8,6 +8,11 @@ class User < ApplicationRecord
                                    dependent:   :destroy
   has_many :following, through: :active_relationships, source: :followed
   has_many :followers, through: :passive_relationships, source: :follower
+  has_many :active_notifications, class_name: 'Notification', foreign_key: 'visitor_id', dependent: :destroy
+  has_many :passive_notifications, class_name: 'Notification', foreign_key: 'visited_id', dependent: :destroy
+
+  belongs_to :visitor, class_name: 'User', foreign_key: 'visitor_id', optional: true
+  belongs_to :visited, class_name: 'User', foreign_key: 'visited_id', optional: true
   attr_accessor :remember_token, :activation_token, :reset_token
   before_save   :downcase_email
   before_create :create_activation_digest
@@ -100,6 +105,41 @@ class User < ApplicationRecord
   # 現在のユーザーがフォローしてたらtrueを返す
   def following?(other_user)
     following.include?(other_user)
+  end
+
+  # 通知する
+  def create_notification_follow!(current_user)
+    temp = Notification.where(["visitor_id = ? and visited_id = ? and action = ? ",current_user.id, id, 'follow'])
+    byebug
+    if temp.blank?
+      # 5分以内のフォローはまとめる
+      notification_within5min = Notification.where(["visited_id = ? and action = ? and created_at >= ?", id, 'follow', Time.zone.now.ago(5.minutes)])
+      if notification_within5min.count >= 1
+        information = "#{name}さん他#{notification_within5min.count}名にフォローされました"
+        # 直近のお知らせは既読扱いにする
+        notification_within5min.update_all(checked: true)
+      else
+        information = "#{name}さんにフォローされました"
+      end
+      notification = current_user.active_notifications.new(
+        visited_id: id,
+        information: information,
+        action: 'follow'
+      )
+      notification.save if notification.valid?
+    end
+  end
+
+  def create_notification_login!(current_user)
+    temp = Notification.where(["visited_id = ? and action = ? ", current_user.id, 'login'])
+    if temp.blank?
+      notification = current_user.active_notifications.new(
+        visited_id: id,
+        information: '初回ログインありがとうございます。',
+        action: 'login'
+      )
+      notification.save if notification.valid?
+    end
   end
 
   private
