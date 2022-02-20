@@ -7,8 +7,6 @@ class SessionsController < ApplicationController
     if user && user.authenticate(params[:session][:password])
       if user.activated?
         log_in user
-        # 通知のレコードに追加
-        user.create_notification_login!(current_user)
         params[:session][:remember_me] == '1' ? remember(user) : forget(user)
         redirect_back_or user
       else
